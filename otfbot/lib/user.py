@@ -170,5 +170,14 @@ class IrcUser(object):
     def getHostMask(self):
         return self.nick + "!" + self.user + "@" + self.host
 
+    def split(self, sep = None, maxsplit = None):
+        """ DEPRECATED: enable an easy transistion from the
+            old user representation with a string to the
+            new one with an IrcUser object
+            @ivar sep: delimiter string
+            @ivar maxsplit: how many splits to do at maximum
+        """
+        self.GetHostMask().split(sep, maxsplit)
+
     def __repr__(self):
         return "<IrcUser %s (%s)>" % (self.getHostMask(), self.name)
