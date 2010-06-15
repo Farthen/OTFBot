@@ -39,6 +39,7 @@ class Plugin(chatMod.chatMod):
         self.files = {}
         self.path = {}
 
+        os.umask(0022)
         #this has no usable defaultconfig string, because datadir is only known at runtime
         self.datadir = bot.config.getPath("logdir", datadir, ".", "log")
         default = "$n-$c/$y-$m-$d.log"
@@ -52,14 +53,12 @@ class Plugin(chatMod.chatMod):
             locale.setlocale(locale.LC_ALL, "")
         # saves the hour, to detect daychanges
         self.day = self.ts("%d")
-        for c in self.bot.channels:
-            self.setNetwork()
-            self.joined(c)
+        self.setNetwork()
 
     def timemap(self):
         return {'y': self.ts("%Y"), 'm': self.ts("%m"), 'd': self.ts("%d")}
 
-    def ts(self, format="%H:%M"):
+    def ts(self, format="[%H:%M]"):
         """timestamp"""
         return time.strftime(format, time.localtime(time.time()))
 
@@ -90,15 +89,16 @@ class Plugin(chatMod.chatMod):
             self.files[channel].flush()
 
     def logPrivate(self, user, mystring):
-        dic = self.timemap()
-        dic['c'] = string.lower(user)
-        filename = Template(self.logpath).safe_substitute(dic)
-        #TODO: blocking
-        if not os.path.exists(os.path.dirname(filename)):
-            os.makedirs(os.path.dirname(filename))
-        file = open(filename, "a")
-        file.write(self.ts() + " " + mystring + "\n")
-        file.close()
+        #dic = self.timemap()
+        #dic['c'] = string.lower(user)
+        #filename = Template(self.logpath).safe_substitute(dic)
+        ##TODO: blocking
+        #if not os.path.exists(os.path.dirname(filename)):
+        #    os.makedirs(os.path.dirname(filename))
+        #file = open(filename, "a")
+        #file.write(self.ts() + " " + mystring + "\n")
+        #file.close()
+        pass
 
     def joined(self, channel):
         self.channels[string.lower(channel)] = 1
@@ -110,16 +110,18 @@ class Plugin(chatMod.chatMod):
             os.makedirs(os.path.dirname(file))
         self.files[string.lower(channel)] = open(file, "a")
         self.log(channel, "--- Log opened " + self.ts("%a %b %d %H:%M:%S %Y"), False)
-        self.log(channel, "-!- " + self.bot.nickname + " [" + self.bot.nickname + "@hostmask] has joined " + channel) #TODO: real Hostmask
+        #self.log(channel, "*** " + self.bot.nickname + " [" + self.bot.nickname + "@hostmask] has joined " + channel) #TODO: real Hostmask
+        self.channels[string.lower(channel)] = 1
 
     def left(self, channel):
-        self.log(channel, "-!- " + self.bot.nickname + "[" + self.bot.nickname + "@hostmask] has left " + channel)
+        self.log(channel, "*** " + self.bot.nickname + "[" + self.bot.nickname + "@hostmask] has left " + channel)
         del self.channels[string.lower(channel)]
         self.files[string.lower(channel)].close()
 
     def msg(self, user, channel, msg):
+	#self.logger.debug(user+" "+channel+" "+msg)
         user = user.split("!")[0]
-        modesign = " " #self.bot.users[channel][user]['modchar']
+        modesign = "" #self.bot.users[channel][user]['modchar']
         if string.lower(channel) == string.lower(self.bot.nickname):
             self.logPrivate(user, "<" + modesign + user + "> " + msg)
         elif len(channel) > 0 and channel[0] == "#":
@@ -141,40 +143,44 @@ class Plugin(chatMod.chatMod):
     def action(self, user, channel, msg):
         #self.logger.debug(user+channel+msg)
         user = user.split("!")[0]
-        self.log(channel, " * " + user + " " + msg)
+        self.log(channel, "* " + user + " " + msg)
 
     def modeChanged(self, user, channel, set, modes, args):
         user = user.split("!")[0]
         sign = "+"
         if not set:
             sign = "-"
-        self.log(channel, "-!- mode/" + channel + " [" + sign + modes + " " + string.join(args, " ") + "] by " + user)
+        self.log(channel, "*** mode/" + channel + " [" + sign + modes + " " + string.join(args, " ") + "] by " + user)
 
     def userKicked(self, kickee, channel, kicker, message):
-        self.log(channel, "-!- " + kickee + " was kicked from " + channel + " by " + kicker + " [" + message + "]")
+        self.log(channel, "*** " + kickee + " was kicked from " + channel + " by " + kicker + " [" + message + "]")
 
     def userJoined(self, user, channel):
-        self.log(channel, "-!- " + user.split("!")[0] + " [" + user.split("!")[1] + "] has joined " + channel)
+        self.log(channel, "*** " + user.split("!")[0] + " has joined " + channel)
 
     def userLeft(self, user, channel):
-        self.log(channel, "-!- " + user.split("!")[0] + " [" + user.split("!")[1] + "] has left " + channel)
+        self.log(channel, "*** " + user.split("!")[0] + " has left " + channel)
 
     def userQuit(self, user, quitMessage):
-        userlists = self.bot.getChannelUserDict()
-        for channel in userlists:
-            if user.split("!")[0] in userlists[channel]:
-                self.log(channel, "-!- " + user.split("!")[0] + " [" + user.split("!")[1] + "] has quit [" + quitMessage + "]")
+        user = user.split("!")[0]
+        userdict = self.bot.getChannelUserDict()
+        for channel in userdict:
+            for chanuser in userdict[channel]:
+                if chanuser.nick == user:
+                    self.log(channel, "*** " + user + " has quit IRC (" + quitMessage + ")")
 
     def topicUpdated(self, user, channel, newTopic):
         #TODO: first invoced on join. This should not be logged
-        self.log(channel, "-!- " + user + " changed the topic of " + channel + " to: " + newTopic)
+        self.log(channel, "*** " + user + " changed the topic of " + channel + " to: " + newTopic)
 
     def userRenamed(self, oldname, newname):
         #TODO: This can not handle different channels right
-        userlists = self.bot.getChannelUserDict()
-        for channel in userlists:
-            if newname in userlists[channel]:
-                self.log(channel, "-!- " + oldname + " is now known as " + newname)
+        userdict = self.bot.getChannelUserDict()
+        for channel in userdict:
+            for chanuser in userdict[channel]:
+                if chanuser.nick == oldname:
+                    self.log(channel, "*** " + oldname + " is now known as " + newname)
+                    chanuser.nick = newname
 
     def stop(self):
         for channel in self.channels:
